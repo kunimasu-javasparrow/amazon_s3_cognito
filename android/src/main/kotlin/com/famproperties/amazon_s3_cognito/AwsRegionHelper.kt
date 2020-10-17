@@ -2,25 +2,29 @@ package com.famproperties.amazon_s3_cognito
 
 import android.content.Context
 import android.util.Log
-
+import java.util.UUID
 
 import com.amazonaws.auth.CognitoCachingCredentialsProvider
 import com.amazonaws.mobileconnectors.s3.transferutility.*
 import com.amazonaws.regions.Regions
 import com.amazonaws.services.s3.AmazonS3Client
+import com.amazonaws.services.s3.model.GetObjectRequest
+
 import java.io.File
 import java.io.UnsupportedEncodingException
+import 	android.os.Handler
+import android.os.Looper
 
-
-class AwsRegionHelper(private val context: Context, private val onUploadCompleteListener: OnUploadCompleteListener,
+class AwsRegionHelper(private val context: Context, private val onCompleteListener: OnCompleteListener,
                       private val BUCKET_NAME: String, private val IDENTITY_POOL_ID: String,
-                      private val IMAGE_NAME: String,private val REGION: String, private val SUB_REGION: String) {
+                      private val IMAGE_NAME: String, private val REGION: String, private val SUB_REGION: String) {
 
     private var transferUtility: TransferUtility
     private var nameOfUploadedFile: String? = null
     private var region1:Regions = Regions.DEFAULT_REGION
     private var subRegion1:Regions = Regions.DEFAULT_REGION
 
+    private val handler = Handler(Looper.getMainLooper())
 
     init {
 
@@ -48,6 +52,48 @@ class AwsRegionHelper(private val context: Context, private val onUploadComplete
     }
 
     @Throws(UnsupportedEncodingException::class)
+    fun downloadImage() : String {
+
+        initRegion()
+
+        val credentialsProvider = CognitoCachingCredentialsProvider(context, IDENTITY_POOL_ID, region1)
+        TransferNetworkLossHandler.getInstance(context.applicationContext)
+
+        val amazonS3Client = AmazonS3Client(credentialsProvider)
+        amazonS3Client.setRegion(com.amazonaws.regions.Region.getRegion(subRegion1))
+
+        Thread(Runnable {
+
+            val s3Object = amazonS3Client.getObject(GetObjectRequest(BUCKET_NAME, IMAGE_NAME))
+            val s3ObjectContent = s3Object.objectContent
+            if (s3ObjectContent == null) {
+
+                handler.postDelayed({
+                    onCompleteListener.onFailed()
+                }, 0)
+
+            } else {
+
+                val dstFile = File(context.cacheDir, UUID.randomUUID().toString()).also {
+
+                    it.outputStream().use { output ->
+                        s3ObjectContent.copyTo(output)
+                    }
+
+                }
+
+                handler.postDelayed({
+                    onCompleteListener.onDownloadComplete(dstFile.absolutePath)
+                }, 0)
+
+            }
+
+        }).start()
+        return IMAGE_NAME
+
+    }
+
+    @Throws(UnsupportedEncodingException::class)
     fun deleteImage(): String {
 
         initRegion()
@@ -57,10 +103,10 @@ class AwsRegionHelper(private val context: Context, private val onUploadComplete
 
         val amazonS3Client = AmazonS3Client(credentialsProvider)
         amazonS3Client.setRegion(com.amazonaws.regions.Region.getRegion(subRegion1))
-        Thread(Runnable{
+        Thread(Runnable {
             amazonS3Client.deleteObject(BUCKET_NAME, IMAGE_NAME)
         }).start()
-        onUploadCompleteListener.onUploadComplete("Success")
+        onCompleteListener.onUploadComplete("Success")
         return IMAGE_NAME
 
     }
@@ -84,16 +130,16 @@ class AwsRegionHelper(private val context: Context, private val onUploadComplete
         transferObserver.setTransferListener(object : TransferListener {
             override fun onStateChanged(id: Int, state: TransferState) {
                 if (state == TransferState.COMPLETED) {
-                    onUploadCompleteListener.onUploadComplete(getUploadedUrl(nameOfUploadedFile))
+                    onCompleteListener.onUploadComplete(getUploadedUrl(nameOfUploadedFile))
                 }
-                if (state == TransferState.FAILED ||  state == TransferState.WAITING_FOR_NETWORK) {
-                    onUploadCompleteListener.onFailed()
+                if (state == TransferState.FAILED || state == TransferState.WAITING_FOR_NETWORK) {
+                    onCompleteListener.onFailed()
                 }
             }
 
             override fun onProgressChanged(id: Int, bytesCurrent: Long, bytesTotal: Long) {}
             override fun onError(id: Int, ex: Exception) {
-                onUploadCompleteListener.onFailed()
+                onCompleteListener.onFailed()
                 Log.e(TAG, "error in upload id [ " + id + " ] : " + ex.message)
 
             }
@@ -106,9 +152,11 @@ class AwsRegionHelper(private val context: Context, private val onUploadComplete
         return filePath.replace("[^.A-Za-z0-9]".toRegex(), "")
     }
 
-    interface OnUploadCompleteListener {
-        fun onUploadComplete(imageUrl: String)
+    interface OnCompleteListener {
         fun onFailed()
+        fun onUploadComplete(imageUrl: String) {}
+        fun onDeleteComplete() {}
+        fun onDownloadComplete(tmpDownloadPath: String) {}
     }
 
     companion object {
@@ -116,7 +164,7 @@ class AwsRegionHelper(private val context: Context, private val onUploadComplete
         private const val URL_TEMPLATE = "https://s3.amazonaws.com/%s/%s"
     }
 
-    private fun  getRegionFor(name:String):Regions{
+    private fun  getRegionFor(name: String):Regions{
 
         if(name == "US_EAST_1"){
             return Regions.US_EAST_1

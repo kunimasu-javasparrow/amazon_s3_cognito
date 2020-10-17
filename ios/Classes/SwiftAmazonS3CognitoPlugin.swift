@@ -67,7 +67,7 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
 
               //uploadRequest?.contentType = "image/jpeg"
               uploadRequest?.body = fileUrl as URL
-              uploadRequest?.acl = .publicReadWrite
+              uploadRequest?.acl = .private
 
               let credentialsProvider = AWSCognitoCredentialsProvider(
                   regionType: AWSRegionType.USEast1,
@@ -94,6 +94,8 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
               uploadImageForRegion(call,result: result)
           }else if(call.method.elementsEqual("deleteImage")){
               deleteImage(call,result: result)
+          }else if(call.method.elementsEqual("downloadImage")){
+              downloadImage(call,result: result)
           }
       }
 
@@ -174,7 +176,7 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
 
           uploadRequest?.body = fileUrl as URL
 
-          uploadRequest?.acl = .publicReadWrite
+          uploadRequest?.acl = .private
 
 
           let credentialsProvider = AWSCognitoCredentialsProvider(
@@ -242,6 +244,59 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
               return nil
           }
 
+
+      }
+
+      func downloadImage(_ call: FlutterMethodCall, result: @escaping FlutterResult){
+          let arguments = call.arguments as? NSDictionary
+          let bucket = arguments!["bucket"] as? String
+          let identity = arguments!["identity"] as? String
+          let fileName = arguments!["imageName"] as? String
+          let region = arguments!["region"] as? String
+          let subRegion = arguments!["subRegion"] as? String
+
+          if(region != nil && subRegion != nil){
+              initRegions(region: region!, subRegion: subRegion!)
+          }
+
+          let credentialsProvider = AWSCognitoCredentialsProvider(
+              regionType: region1,
+              identityPoolId: identity!)
+          let configuration = AWSServiceConfiguration(
+              region: subRegion1,
+              credentialsProvider: credentialsProvider)
+          AWSServiceManager.default().defaultServiceConfiguration = configuration
+
+          AWSS3.register(with: configuration!, forKey: "defaultKey")
+          let s3 = AWSS3.s3(forKey: "defaultKey")
+
+          let getObjectRequest = AWSS3GetObjectRequest()
+          getObjectRequest?.bucket = bucket // bucket name
+          getObjectRequest?.key = fileName // File name
+        
+          s3.getObject(getObjectRequest!).continueWith { (task) -> AnyObject? in
+            
+            if let error = task.error {
+                print("Error occurred: \(error)")
+                result("Error occurred: \(error)")
+                return nil
+            }
+            if let taskResult = task.result, let data = taskResult.body as? Data {
+
+                var dst = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+                dst.appendPathComponent(UUID().uuidString)
+
+                try? data.write(to: dst)
+                print("✅ Download successed (\(dst.path))")
+                result(dst.path)
+
+            } else {
+                print("❌ Unexpected empty result.")
+                result("❌ Unexpected empty result.")
+            }
+            return nil
+            
+          }
 
       }
 

@@ -49,4 +49,18 @@ class AmazonS3Cognito {
     final String imagePath = await _channel.invokeMethod('deleteImage', params);
     return imagePath;
   }
+
+  static Future<String> download(String bucket, String identity,
+      String imageName, String region, String subRegion) async {
+    final Map<String, dynamic> params = <String, dynamic>{
+      'bucket': bucket,
+      'identity': identity,
+      'imageName': imageName,
+      'region': region,
+      'subRegion': subRegion
+    };
+    final String tmpDownloadPath =
+        await _channel.invokeMethod('downloadImage', params);
+    return tmpDownloadPath;
+  }
 }

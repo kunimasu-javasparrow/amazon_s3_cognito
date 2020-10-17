@@ -60,7 +60,7 @@ class AmazonS3CognitoPlugin private constructor(private val context: Context) : 
       } else if (call.method.equals("uploadImage")) {
           val file = File(filePath)
           try {
-              awsRegionHelper = AwsRegionHelper(context, object : AwsRegionHelper.OnUploadCompleteListener {
+              awsRegionHelper = AwsRegionHelper(context, object : AwsRegionHelper.OnCompleteListener {
                   override fun onFailed() {
                       System.out.println("\n❌ upload failed")
                       try{
@@ -83,7 +83,7 @@ class AmazonS3CognitoPlugin private constructor(private val context: Context) : 
 
       } else if (call.method.equals("deleteImage")) {
           try {
-              awsRegionHelper = AwsRegionHelper(context, object : AwsRegionHelper.OnUploadCompleteListener{
+              awsRegionHelper = AwsRegionHelper(context, object : AwsRegionHelper.OnCompleteListener{
 
                   override fun onFailed() {
                       System.out.println("\n❌ delete failed")
@@ -95,11 +95,11 @@ class AmazonS3CognitoPlugin private constructor(private val context: Context) : 
 
                   }
 
-                  override fun onUploadComplete(@NotNull imageUrl: String) {
-                      System.out.println("\n✅ delete complete: $imageUrl")
+                  override fun onDeleteComplete() {
+                      System.out.println("\n✅ delete complete: $fileName")
 
                       try{
-                          result.success(imageUrl)
+                          result.success(fileName)
                       }catch (e:Exception){
 
                       }
@@ -109,6 +109,37 @@ class AmazonS3CognitoPlugin private constructor(private val context: Context) : 
           } catch (e: UnsupportedEncodingException) {
               e.printStackTrace()
           }
+
+      } else if (call.method.equals("downloadImage")) {
+
+          try {
+              awsRegionHelper = AwsRegionHelper(context, object : AwsRegionHelper.OnCompleteListener{
+
+                  override fun onFailed() {
+                      System.out.println("\n❌ get failed")
+                      try{
+                          result.success("Failed")
+                      }catch (e:Exception){
+
+                      }
+
+                  }
+
+                  override fun onDownloadComplete(@NotNull tmpDownloadPath: String) {
+                      System.out.println("\n✅ download complete: $tmpDownloadPath")
+
+                      try{
+                          result.success(tmpDownloadPath)
+                      }catch (e:Exception){
+
+                      }
+                  }
+              }, bucket!!, identity!!, fileName!!, region!!, subRegion!!)
+              awsRegionHelper!!.downloadImage()
+          } catch (e: UnsupportedEncodingException) {
+              e.printStackTrace()
+          }
+
 
       } else {
           result.notImplemented()
