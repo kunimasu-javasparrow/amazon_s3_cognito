@@ -14,6 +14,7 @@ import java.io.File
 import java.io.UnsupportedEncodingException
 import 	android.os.Handler
 import android.os.Looper
+import com.amazonaws.services.s3.model.AmazonS3Exception
 
 class AwsRegionHelper(private val context: Context, private val onCompleteListener: OnCompleteListener,
                       private val BUCKET_NAME: String, private val IDENTITY_POOL_ID: String,
@@ -64,26 +65,37 @@ class AwsRegionHelper(private val context: Context, private val onCompleteListen
 
         Thread(Runnable {
 
-            val s3Object = amazonS3Client.getObject(GetObjectRequest(BUCKET_NAME, IMAGE_NAME))
-            val s3ObjectContent = s3Object.objectContent
-            if (s3ObjectContent == null) {
+            try {
 
-                handler.postDelayed({
-                    onCompleteListener.onFailed()
-                }, 0)
+                val s3Object = amazonS3Client.getObject(GetObjectRequest(BUCKET_NAME, IMAGE_NAME))
+                val s3ObjectContent = s3Object.objectContent
+                if (s3ObjectContent == null) {
 
-            } else {
+                    handler.postDelayed({
+                        onCompleteListener.onFailed()
+                    }, 0)
 
-                val dstFile = File(context.cacheDir, UUID.randomUUID().toString()).also {
+                } else {
 
-                    it.outputStream().use { output ->
-                        s3ObjectContent.copyTo(output)
+                    val dstFile = File(context.cacheDir, UUID.randomUUID().toString()).also {
+
+                        it.outputStream().use { output ->
+                            s3ObjectContent.copyTo(output)
+                        }
+
                     }
+
+                    handler.postDelayed({
+                        onCompleteListener.onDownloadComplete(dstFile.absolutePath)
+                    }, 0)
 
                 }
 
+            } catch (e: AmazonS3Exception) {
+
+                e.printStackTrace()
                 handler.postDelayed({
-                    onCompleteListener.onDownloadComplete(dstFile.absolutePath)
+                    onCompleteListener.onFailed()
                 }, 0)
 
             }

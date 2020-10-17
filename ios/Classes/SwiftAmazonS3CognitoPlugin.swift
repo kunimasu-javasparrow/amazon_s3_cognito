@@ -278,7 +278,7 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
             
             if let error = task.error {
                 print("Error occurred: \(error)")
-                result("Error occurred: \(error)")
+                result("Failed")
                 return nil
             }
             if let taskResult = task.result, let data = taskResult.body as? Data {
@@ -292,7 +292,7 @@ public class SwiftAmazonS3CognitoPlugin: NSObject, FlutterPlugin {
 
             } else {
                 print("❌ Unexpected empty result.")
-                result("❌ Unexpected empty result.")
+                result("Failed")
             }
             return nil
             
