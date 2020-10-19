@@ -8,13 +8,9 @@ import com.amazonaws.auth.CognitoCachingCredentialsProvider
 import com.amazonaws.mobileconnectors.s3.transferutility.*
 import com.amazonaws.regions.Regions
 import com.amazonaws.services.s3.AmazonS3Client
-import com.amazonaws.services.s3.model.GetObjectRequest
 
 import java.io.File
 import java.io.UnsupportedEncodingException
-import 	android.os.Handler
-import android.os.Looper
-import com.amazonaws.services.s3.model.AmazonS3Exception
 
 class AwsRegionHelper(private val context: Context, private val onCompleteListener: OnCompleteListener,
                       private val BUCKET_NAME: String, private val IDENTITY_POOL_ID: String,
@@ -24,8 +20,6 @@ class AwsRegionHelper(private val context: Context, private val onCompleteListen
     private var nameOfUploadedFile: String? = null
     private var region1:Regions = Regions.DEFAULT_REGION
     private var subRegion1:Regions = Regions.DEFAULT_REGION
-
-    private val handler = Handler(Looper.getMainLooper())
 
     init {
 
@@ -63,44 +57,28 @@ class AwsRegionHelper(private val context: Context, private val onCompleteListen
         val amazonS3Client = AmazonS3Client(credentialsProvider)
         amazonS3Client.setRegion(com.amazonaws.regions.Region.getRegion(subRegion1))
 
-        Thread(Runnable {
+        val dstFile = File(context.cacheDir, UUID.randomUUID().toString())
+        transferUtility = TransferUtility(amazonS3Client, context)
 
-            try {
+        val transferObserver = transferUtility.download(BUCKET_NAME, IMAGE_NAME, dstFile)
 
-                val s3Object = amazonS3Client.getObject(GetObjectRequest(BUCKET_NAME, IMAGE_NAME))
-                val s3ObjectContent = s3Object.objectContent
-                if (s3ObjectContent == null) {
-
-                    handler.postDelayed({
-                        onCompleteListener.onFailed()
-                    }, 0)
-
-                } else {
-
-                    val dstFile = File(context.cacheDir, UUID.randomUUID().toString()).also {
-
-                        it.outputStream().use { output ->
-                            s3ObjectContent.copyTo(output)
-                        }
-
-                    }
-
-                    handler.postDelayed({
-                        onCompleteListener.onDownloadComplete(dstFile.absolutePath)
-                    }, 0)
-
+        transferObserver.setTransferListener(object : TransferListener {
+            override fun onStateChanged(id: Int, state: TransferState) {
+                if (state == TransferState.COMPLETED) {
+                    onCompleteListener.onDownloadComplete(dstFile.absolutePath)
                 }
-
-            } catch (e: AmazonS3Exception) {
-
-                e.printStackTrace()
-                handler.postDelayed({
+                if (state == TransferState.FAILED || state == TransferState.WAITING_FOR_NETWORK) {
                     onCompleteListener.onFailed()
-                }, 0)
-
+                }
             }
 
-        }).start()
+            override fun onProgressChanged(id: Int, bytesCurrent: Long, bytesTotal: Long) {}
+            override fun onError(id: Int, ex: Exception) {
+                onCompleteListener.onFailed()
+                Log.e(TAG, "error in download id [ " + id + " ] : " + ex.message)
+
+            }
+        })
         return IMAGE_NAME
 
     }
